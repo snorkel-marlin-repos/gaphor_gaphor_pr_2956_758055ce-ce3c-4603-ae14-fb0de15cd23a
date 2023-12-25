@@ -1,0 +1,59 @@
+name: "CodeQL"
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+env:
+  python_version: '3.11'
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    permissions:
+      security-events: write  # for github/codeql-action/autobuild to send a status report
+    name: Analyze
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Harden Runner
+      uses: step-security/harden-runner@eb238b55efaa70779f274895e782ed17c84f2895 # v2.6.1
+      with:
+        egress-policy: audit
+
+    - name: Checkout repository
+      uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+    - name: Set up Python
+      uses: actions/setup-python@0a5c61591373683505ea898e09a3ea4f39ef2b9c # v5.0.0
+      with:
+        python-version: ${{ env.python_version }}
+    - name: Install Linux Dependencies
+      run: >
+        sudo apt-get update -qq && sudo apt-get install -qq --no-install-recommends
+        libgirepository1.0-dev
+    - name: Use Python Dependency Cache
+      uses: actions/cache@704facf57e6136b1bc63b828d79edcd491f0ee84 # v3.3.2
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}-22.04
+    - name: Install Poetry
+      run: pipx install --python python${{ env.python_version }} --pip-args=--constraint=.github/constraints.txt poetry
+    - name: Configure Poetry
+      run: poetry config virtualenvs.in-project true
+    - name: Install Python Dependencies
+      run: |
+        poetry install --no-interaction
+        # Set the `CODEQL-PYTHON` environment variable to the Python executable
+        # that includes the dependencies
+        echo "CODEQL_PYTHON=$(which python)" >> $GITHUB_ENV
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@012739e5082ff0c22ca6d6ab32e07c36df03c4a4 # v3.22.12
+      with:
+        languages: python
+        # Override the default behavior so that the action doesn't attempt
+        # to auto-install Python dependencies
+        setup-python-dependencies: false
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@012739e5082ff0c22ca6d6ab32e07c36df03c4a4 # v3.22.12
